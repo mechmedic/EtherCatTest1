@@ -75,100 +75,19 @@ static ec_slave_config_state_t sc_ana_in_state = {};
 // process data
 static uint8_t *domain1_pd = NULL;
 
-#define BusCouplerPos  0, 0
-#define DigOutSlavePos 0, 2
-#define AnaInSlavePos  0, 3
-#define AnaOutSlavePos 0, 4
-
-#define Beckhoff_EK1100 0x00000002, 0x044c2c52
-#define Beckhoff_EL2004 0x00000002, 0x07d43052
-#define Beckhoff_EL2032 0x00000002, 0x07f03052
-#define Beckhoff_EL3152 0x00000002, 0x0c503052
-#define Beckhoff_EL3102 0x00000002, 0x0c1e3052
-#define Beckhoff_EL4102 0x00000002, 0x10063052
-
-// offsets for PDO entries
-static unsigned int off_ana_in_status;
-static unsigned int off_ana_in_value;
-static unsigned int off_ana_out;
-static unsigned int off_dig_out;
-
-const static ec_pdo_entry_reg_t domain1_regs[] = {
-    {AnaInSlavePos,  Beckhoff_EL3102, 0x3101, 1, &off_ana_in_status},
-    {AnaInSlavePos,  Beckhoff_EL3102, 0x3101, 2, &off_ana_in_value},
-    {AnaOutSlavePos, Beckhoff_EL4102, 0x3001, 1, &off_ana_out},
-    {DigOutSlavePos, Beckhoff_EL2032, 0x3001, 1, &off_dig_out},
-    {}
-};
-
 static unsigned int counter = 0;
-static unsigned int blink = 0;
+static uint8_t buzz = 0;
+static uint8_t SegData = 65;
 
-/*****************************************************************************/
+static uint32_t offsetAlarm;
+static uint32_t offsetTemperature;
+static uint32_t offsetSegment;
+static uint32_t offsetPot;
+static uint32_t offsetSwitch;
 
-// Analog in --------------------------
-
-static ec_pdo_entry_info_t el3102_pdo_entries[] = {
-    {0x3101, 1,  8}, // channel 1 status
-    {0x3101, 2, 16}, // channel 1 value
-    {0x3102, 1,  8}, // channel 2 status
-    {0x3102, 2, 16}, // channel 2 value
-    {0x6401, 1, 16}, // channel 1 value (alt.)
-    {0x6401, 2, 16}  // channel 2 value (alt.)
-};
-
-static ec_pdo_info_t el3102_pdos[] = {
-    {0x1A00, 2, el3102_pdo_entries},
-    {0x1A01, 2, el3102_pdo_entries + 2}
-};
-
-static ec_sync_info_t el3102_syncs[] = {
-    {2, EC_DIR_OUTPUT},
-    {3, EC_DIR_INPUT, 2, el3102_pdos},
-    {0xff}
-};
-
-// Analog out -------------------------
-
-static ec_pdo_entry_info_t el4102_pdo_entries[] = {
-    {0x3001, 1, 16}, // channel 1 value
-    {0x3002, 1, 16}, // channel 2 value
-};
-
-static ec_pdo_info_t el4102_pdos[] = {
-    {0x1600, 1, el4102_pdo_entries},
-    {0x1601, 1, el4102_pdo_entries + 1}
-};
-
-static ec_sync_info_t el4102_syncs[] = {
-    {2, EC_DIR_OUTPUT, 2, el4102_pdos},
-    {3, EC_DIR_INPUT},
-    {0xff}
-};
-
-// Digital out ------------------------
-
-static ec_pdo_entry_info_t el2004_channels[] = {
-    {0x3001, 1, 1}, // Value 1
-    {0x3001, 2, 1}, // Value 2
-    {0x3001, 3, 1}, // Value 3
-    {0x3001, 4, 1}  // Value 4
-};
-
-static ec_pdo_info_t el2004_pdos[] = {
-    {0x1600, 1, &el2004_channels[0]},
-    {0x1601, 1, &el2004_channels[1]},
-    {0x1602, 1, &el2004_channels[2]},
-    {0x1603, 1, &el2004_channels[3]}
-};
-
-static ec_sync_info_t el2004_syncs[] = {
-    {0, EC_DIR_OUTPUT, 4, el2004_pdos},
-    {1, EC_DIR_INPUT},
-    {0xff}
-};
-
-/*****************************************************************************/
+float TempData;
+uint16_t PotData;
+uint8_t SwitchData;
 
 void check_domain1_state(void)
 {
@@ -232,41 +151,45 @@ void check_slave_config_states(void)
 
 void cyclic_task()
 {
-    // receive process data
+    // CKim - receive process data
     ecrt_master_receive(master);
     ecrt_domain_process(domain1);
 
-    // check process data state
-    check_domain1_state();
+//     // check process data state (optional)
+//     check_domain1_state();
 
+    // CKim - Read and write process data
     if (counter) {
         counter--;
-    } else { // do this at 1 Hz
+    } 
+    else { // do this at 1 Hz
         counter = FREQUENCY;
 
-        // calculate new process data
-        blink = !blink;
-
         // check for master state (optional)
-        check_master_state();
-
+        //check_master_state();
         // check for slave configuration state(s) (optional)
-        check_slave_config_states();
-    }
+        //check_slave_config_states();
 
-#if 0
+        
+        // CKim - Update new data to write
+        buzz = !buzz;
+        SegData++;
+
+        // CKim - Print received data
+        printf("Temperature : %.2f\t Pot : %d\t Switch : %d\n", TempData,PotData,SwitchData);
+    }            
+
     // read process data
-    printf("AnaIn: state %u value %u\n",
-            EC_READ_U8(domain1_pd + off_ana_in_status),
-            EC_READ_U16(domain1_pd + off_ana_in_value));
-#endif
+    TempData = EC_READ_REAL(domain1_pd + offsetTemperature);
+    PotData = EC_READ_U16(domain1_pd + offsetPot);
+    SwitchData = EC_READ_U8(domain1_pd + offsetSwitch);
 
-#if 1
     // write process data
-    EC_WRITE_U8(domain1_pd + off_dig_out, blink ? 0x06 : 0x09);
-#endif
+    //EC_WRITE_U8(domain1_pd + offsetAlarm, buzz ? 0xFF : 0x00);
+    EC_WRITE_U8(domain1_pd + offsetAlarm, 127);
+    EC_WRITE_U8(domain1_pd + offsetSegment, SegData);
 
-    // send process data
+    // CKim - send process data
     ecrt_domain_queue(domain1);
     ecrt_master_send(master);
 }
@@ -310,60 +233,144 @@ int main(int argc, char **argv)
     // This can be done by creating “slave configurations” that will provide 
     // bus position, vendor id and product code.
     // ecrt_master_slave_config(master, alias, position, vendor_id, product code)
+    // If alias is 0, slaves are addressed by absolute position, 
+    // otherwise, position 'p 'means p'th slave after the slave with the 'alias' name. 
     
     // alias, position, vendor_id and product code can be found by connecting the slaves
-    // and running commandline program 'ethercat cstruct'
+    // and running command line program 'ethercat cstruct'
     // In this eample, two EasyCAT slaves are connected. 
-    ec_slave_config_t *sc;
+    ec_slave_config_t *sc1;
+    ec_slave_config_t *sc2;
     uint32_t VendorID_EasyCAT = 0x0000079a;
     uint32_t ProductCode_LAB1 = 0xababa001;
     uint32_t ProductCode_LAB2 = 0xababa002;
     
-    if (!(sc = ecrt_master_slave_config(master,0,0,VendorID_EasyCAT,ProductCode_LAB1))) {
+    if (!(sc1 = ecrt_master_slave_config(master,0,0,VendorID_EasyCAT,ProductCode_LAB1))) {
         fprintf(stderr, "Failed to get slave configuration.\n");
         return -1;
     }    
-    if (!(sc = ecrt_master_slave_config(master,0,1,VendorID_EasyCAT,ProductCode_LAB2))) {
+    if (!(sc2 = ecrt_master_slave_config(master,0,1,VendorID_EasyCAT,ProductCode_LAB2))) {
         fprintf(stderr, "Failed to get slave configuration.\n");
         return -1;
     }    
     printf("Configured Slaves!!\n");
 
+    // CKim - 4. For each slaves, configure Process Data Objects (PDO)
+    // Each slave has 'sync manager' that coordinates the synchronization of 
+    // data exchange by PDOs. Configure the PDO mapping of the sync manager
+    
+    // PDO mapping consists of 
+    // 1. 'ec_pdo_entry_info_t' which specifies index/subindex/size of 
+    //     an object that will be mapped to PDO
+    // 2. 'ec_pdo_info_t' which specifies index in a slave's object dictionary 
+    //    (PDO index) that the entry information will be stored. 
+    // 3. 'ec_sync_info_t', sync manager configuration information
+    //     index / direction / number of managed PDOs / PDO info / watchdog mode
 
+    // CKim - PDO Entry Info Slave 0
+    ec_pdo_entry_info_t slave_0_pdo_entries[] = 
+    {
+        {0x0005, 0x01, 8}, /* Alarm : Master writes value and slave will sound alarm. Output*/
+        {0x0006, 0x01, 32}, /* Temperature : Master will read tempearture. Input */
+    };
 
-    // CKim - 4 Configure PDOs
-    // configure the PDOs that will be exchanged. 
+    // CKim - PDO Entry Info Slave 1
+    ec_pdo_entry_info_t slave_1_pdo_entries[] = 
+    {
+        {0x0005, 0x01, 8}, /* Segments : Master writes value and slave will display. Output */
+        {0x0006, 0x01, 16}, /* Potentiometer : Master will read pot value. Input */
+        {0x0006, 0x02, 8}, /* Switches : Master will read switch press. Input */
+    };
 
+    // CKim - PDO mapping info Slave 0
+    ec_pdo_info_t slave_0_pdos[] = {
+        {0x1600, 1, slave_0_pdo_entries + 0}, /* Outputs : RxPDO. slave reads from master*/
+        {0x1a00, 1, slave_0_pdo_entries + 1}, /* Inputs : TxPDO. slave transmits to master */
+    };
+
+    // CKim - PDO mapping info Slave 1
+    ec_pdo_info_t slave_1_pdos[] = {
+        {0x1600, 1, slave_1_pdo_entries + 0}, /* Outputs */
+        {0x1a00, 2, slave_1_pdo_entries + 1}, /* Inputs */
+    };
+
+    // CKim - Sync manager configuration Slave 0
+    // Sync manager 0, EC_DIR_OUTPUT = written by master, 1 RxPDO 
+    // Sync manager 1, EC_DIR_INPUT = read by master, 1 TxPDO 
+    ec_sync_info_t slave_0_syncs[] = {
+        {0, EC_DIR_OUTPUT, 1, slave_0_pdos + 0, EC_WD_ENABLE},
+        {1, EC_DIR_INPUT, 1, slave_0_pdos + 1, EC_WD_DISABLE},
+        {0xff}
+    };
+
+    // CKim - Sync manager configuration Slave 1
+    ec_sync_info_t slave_1_syncs[] = {
+        {0, EC_DIR_OUTPUT, 1, slave_1_pdos + 0, EC_WD_ENABLE},
+        {1, EC_DIR_INPUT, 1, slave_1_pdos + 1, EC_WD_DISABLE},
+        {0xff}
+    };
+
+    // CKim - Connect the configured Sync manager to corresponding slaves
+    // ecrt_slave_config_pdos (slave configuration, number of sync manager, array of sync manager configuration): 
     printf("Configuring PDOs...\n");
-    if (ecrt_slave_config_pdos(sc_ana_in, EC_END, el3102_syncs)) {
+    if (ecrt_slave_config_pdos(sc1, EC_END, slave_0_syncs)) {
         fprintf(stderr, "Failed to configure PDOs.\n");
         return -1;
     }
 
-    if (ecrt_slave_config_pdos(sc, EC_END, el4102_syncs)) {
+    if (ecrt_slave_config_pdos(sc2, EC_END, slave_1_syncs)) {
         fprintf(stderr, "Failed to configure PDOs.\n");
         return -1;
     }
 
-    if (ecrt_slave_config_pdos(sc, EC_END, el2004_syncs)) {
-        fprintf(stderr, "Failed to configure PDOs.\n");
+
+    // CKim 5. - Register PDO configuration (sync manager configuration) 
+    // of each slave to Process Data Domain. Only the registered entry will be 
+    // communicated by master. 
+    // ecrt_slave_config_reg_pdo_entry()
+    // Returns offset (in bytes) of the PDO entry's process data from the beginning of the 
+    // domain data, which is used for read/write
+    // ecrt_domain_reg_pdo_entry_list()
+
+    offsetAlarm = ecrt_slave_config_reg_pdo_entry(sc1, 0x0005, 0x01, domain1, NULL);
+    if( offsetTemperature < 0) {
+        fprintf(stderr, "Failed to register PDO entry to domain.\n");
+        return -1;
+    }
+    offsetTemperature = ecrt_slave_config_reg_pdo_entry(sc1, 0x0006, 0x01, domain1, NULL);
+    if( offsetTemperature < 0 ) {
+        fprintf(stderr, "Failed to register PDO entry to domain.\n");
+        return -1;
+    }
+    offsetSegment = ecrt_slave_config_reg_pdo_entry(sc2, 0x0005, 0x01, domain1, NULL);
+    if( offsetSegment < 0) {
+        fprintf(stderr, "Failed to register PDO entry to domain.\n");
+        return -1;
+    }
+    offsetPot = ecrt_slave_config_reg_pdo_entry(sc2, 0x0006, 0x01, domain1, NULL);
+    if(offsetPot < 0) {
+        fprintf(stderr, "Failed to register PDO entry to domain.\n");
+        return -1;
+    }
+    offsetSwitch = ecrt_slave_config_reg_pdo_entry(sc2, 0x0006, 0x02, domain1, NULL);
+    if(offsetSwitch < 0) {
+        fprintf(stderr, "Failed to register PDO entry to domain.\n");
         return -1;
     }
 
-    // Create configuration for bus coupler
+    printf("%d,%d,%d,%d,%d\n",offsetAlarm,offsetTemperature,offsetSegment,offsetPot,offsetSwitch);
 
-    if (ecrt_domain_reg_pdo_entry_list(domain1, domain1_regs)) {
-        fprintf(stderr, "PDO entry registration failed!\n");
-        return -1;
-    }
-
-
-
-    struct timespec wakeup_time;
-    int ret = 0;
+    // if (ecrt_domain_reg_pdo_entry_list(domain1, domain1_regs)) {
+    //     fprintf(stderr, "PDO entry registration failed!\n");
+    //     return -1;
+    // }
 
 
+    // CKim 6. - Configure SYNC signal 
+    ecrt_slave_config_dc(sc1, 0x0006, PERIOD_NS, 1000, 0, 0);
 
+
+    // CKim 7. - Activate master, obtain pointer to process data domain's memory
     printf("Activating master...\n");
     if (ecrt_master_activate(master)) {
         return -1;
@@ -373,11 +380,8 @@ int main(int argc, char **argv)
         return -1;
     }
 
-
-
-
+    // CKim - Configure realtime thread priority
     /* Set priority */
-
     struct sched_param param = {};
     param.sched_priority = sched_get_priority_max(SCHED_FIFO);
 
@@ -387,13 +391,16 @@ int main(int argc, char **argv)
     }
 
     /* Lock memory */
-
     if (mlockall(MCL_CURRENT | MCL_FUTURE) == -1) {
         fprintf(stderr, "Warning: Failed to lock memory: %s\n",
                 strerror(errno));
     }
 
     stack_prefault();
+
+    // CKim 8. - Start cyclic data exchange
+    struct timespec wakeup_time;
+    int ret = 0;
 
     printf("Starting RT task with dt=%u ns.\n", PERIOD_NS);
 
