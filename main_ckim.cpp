@@ -261,11 +261,12 @@ int main(int argc, char **argv)
     
     // PDO mapping consists of 
     // 1. 'ec_pdo_entry_info_t' which specifies index/subindex/size of 
-    //     an object that will be mapped to PDO
+    //     an object (PDO Entry) that will be mapped to PDO
     // 2. 'ec_pdo_info_t' which specifies index in a slave's object dictionary 
     //    (PDO index) that the entry information will be stored. 
+    //    {PDOidx, number of PDO entry, pointer to pdo entries}
     // 3. 'ec_sync_info_t', sync manager configuration information
-    //     index / direction / number of managed PDOs / PDO info / watchdog mode
+    //     index / direction / number of PDOs to be managed / PDO info / watchdog mode
 
     // CKim - PDO Entry Info Slave 0
     ec_pdo_entry_info_t slave_0_pdo_entries[] = 
@@ -304,6 +305,8 @@ int main(int argc, char **argv)
     };
 
     // CKim - Sync manager configuration Slave 1
+    // Sync manager 0, EC_DIR_OUTPUT = written by master, 1 RxPDO 
+    // Sync manager 1, EC_DIR_INPUT = read by master, 1 TxPDO 
     ec_sync_info_t slave_1_syncs[] = {
         {0, EC_DIR_OUTPUT, 1, slave_1_pdos + 0, EC_WD_ENABLE},
         {1, EC_DIR_INPUT, 1, slave_1_pdos + 1, EC_WD_DISABLE},
@@ -323,7 +326,6 @@ int main(int argc, char **argv)
         return -1;
     }
 
-
     // CKim 5. - Register PDO configuration (sync manager configuration) 
     // of each slave to Process Data Domain. Only the registered entry will be 
     // communicated by master. 
@@ -331,8 +333,9 @@ int main(int argc, char **argv)
     // Returns offset (in bytes) of the PDO entry's process data from the beginning of the 
     // domain data, which is used for read/write
     // ecrt_domain_reg_pdo_entry_list()
-
-    offsetAlarm = ecrt_slave_config_reg_pdo_entry(sc1, 0x0005, 0x01, domain1, NULL);
+    // offset = ecrt_slave_config_reg_pdo_entry
+    // (slave configuration, index, subindex, domain)   
+     offsetAlarm = ecrt_slave_config_reg_pdo_entry(sc1, 0x0005, 0x01, domain1, NULL);
     if( offsetTemperature < 0) {
         fprintf(stderr, "Failed to register PDO entry to domain.\n");
         return -1;
@@ -368,6 +371,7 @@ int main(int argc, char **argv)
 
     // CKim 6. - Configure SYNC signal 
     ecrt_slave_config_dc(sc1, 0x0006, PERIOD_NS, 1000, 0, 0);
+    ecrt_slave_config_dc(sc2, 0x0006, PERIOD_NS, 1000, 0, 0);
 
 
     // CKim 7. - Activate master, obtain pointer to process data domain's memory
