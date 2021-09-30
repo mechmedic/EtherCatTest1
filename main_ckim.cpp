@@ -77,7 +77,7 @@ static uint8_t *domain1_pd = NULL;
 
 static unsigned int counter = 0;
 static uint8_t buzz = 0;
-static uint8_t SegData = 65;
+static uint8_t SegData = 0;
 
 static uint32_t offsetAlarm;
 static uint32_t offsetTemperature;
@@ -163,7 +163,7 @@ void cyclic_task()
         counter--;
     } 
     else { // do this at 1 Hz
-        counter = FREQUENCY;
+        counter = 1000;
 
         // check for master state (optional)
         //check_master_state();
@@ -176,7 +176,7 @@ void cyclic_task()
         SegData++;
 
         // CKim - Print received data
-        printf("Temperature : %.2f\t Pot : %d\t Switch : %d\n", TempData,PotData,SwitchData);
+        printf("Temperature : %.2f\t Pot : %d\t Switch : %d\t SegData : %d\n", TempData,PotData,SwitchData, SegData);
     }            
 
     // read process data
@@ -185,8 +185,8 @@ void cyclic_task()
     SwitchData = EC_READ_U8(domain1_pd + offsetSwitch);
 
     // write process data
-    //EC_WRITE_U8(domain1_pd + offsetAlarm, buzz ? 0xFF : 0x00);
-    EC_WRITE_U8(domain1_pd + offsetAlarm, 127);
+    EC_WRITE_U8(domain1_pd + offsetAlarm, buzz ? 0xFF : 0x00);
+    //EC_WRITE_U8(domain1_pd + offsetAlarm, 127);
     EC_WRITE_U8(domain1_pd + offsetSegment, SegData);
 
     // CKim - send process data
@@ -284,12 +284,14 @@ int main(int argc, char **argv)
     };
 
     // CKim - PDO mapping info Slave 0
+    // slave reads 1 entry 'Alarm', transmits 1 entry 'Temperature'
     ec_pdo_info_t slave_0_pdos[] = {
         {0x1600, 1, slave_0_pdo_entries + 0}, /* Outputs : RxPDO. slave reads from master*/
         {0x1a00, 1, slave_0_pdo_entries + 1}, /* Inputs : TxPDO. slave transmits to master */
     };
 
     // CKim - PDO mapping info Slave 1
+    // slave reads 1 entry 'Segments', transmits 2 entry 'Pot' and 'Switches'
     ec_pdo_info_t slave_1_pdos[] = {
         {0x1600, 1, slave_1_pdo_entries + 0}, /* Outputs */
         {0x1a00, 2, slave_1_pdo_entries + 1}, /* Inputs */
@@ -298,6 +300,8 @@ int main(int argc, char **argv)
     // CKim - Sync manager configuration Slave 0
     // Sync manager 0, EC_DIR_OUTPUT = written by master, 1 RxPDO 
     // Sync manager 1, EC_DIR_INPUT = read by master, 1 TxPDO 
+    // EC_WD_DISABLE ???
+    // {0xff} at the end is used tell the end of 'ec_sync_info_t' list
     ec_sync_info_t slave_0_syncs[] = {
         {0, EC_DIR_OUTPUT, 1, slave_0_pdos + 0, EC_WD_ENABLE},
         {1, EC_DIR_INPUT, 1, slave_0_pdos + 1, EC_WD_DISABLE},
@@ -314,7 +318,9 @@ int main(int argc, char **argv)
     };
 
     // CKim - Connect the configured Sync manager to corresponding slaves
-    // ecrt_slave_config_pdos (slave configuration, number of sync manager, array of sync manager configuration): 
+    // ecrt_slave_config_pdos (slave configuration, number of sync manager, 
+    // array of sync manager configuration): 
+    // EC_END tells to read until {oxff} in 'ec_sync_info_t' array
     printf("Configuring PDOs...\n");
     if (ecrt_slave_config_pdos(sc1, EC_END, slave_0_syncs)) {
         fprintf(stderr, "Failed to configure PDOs.\n");
