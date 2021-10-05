@@ -33,8 +33,7 @@ This is an example code for using IgH EtherCat master. It is based on the exampl
     ecrt_slave_config_pdos (slave configuration, number of sync manager, array of ec_sync_info_t)
     ```
 
-5. Register PDO configuration (sync manager configuration) of each slave to Process Data Domain and obtain 'offset' of each object, which will be used later for reading and writing
-    ```
+5. Registers a PDO entry for process data exchange in a domain. PDO configuration (sync manager configuration) of each slave is registered to Process Data Domain and obtain 'offset' of each object, which will be used later for reading and writing is returned. 
     // offset = ecrt_slave_config_reg_pdo_entry(slave configuration, index, subindex, domain)
     ```
 6. Configure SYNC signal 
